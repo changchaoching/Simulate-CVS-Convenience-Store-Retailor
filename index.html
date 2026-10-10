@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CVS 零售專家 - 便利商店經營模擬系統 (Web Edition)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;600&display=swap');
+        body { font-family: 'Plus Jakarta Sans', 'Noto Sans TC', system-ui, -apple-system, sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .slider-thumb::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #0284c7;
+            cursor: pointer;
+            box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.25);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen antialiased flex flex-col">
+
+    <!-- Top Navigation Bar -->
+    <header class="border-b border-slate-200 bg-white/95 backdrop-blur sticky top-0 z-50 px-4 py-3 sm:px-6 shadow-sm">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-sky-500 flex items-center justify-center shadow-md shadow-blue-500/20 text-white font-black text-xl">
+                    CVS
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                        CVS 零售專家：連鎖便利商店經營模擬器
+                        <span class="text-xs bg-sky-50 text-sky-700 border border-sky-200 px-2 py-0.5 rounded-full font-mono font-semibold">Top-BOSS RE 模型</span>
+                    </h1>
+                    <p class="text-xs text-slate-500">商圈立地分析・四大品類定價採購・天氣促銷排班・損益與過期報廢管理</p>
+                </div>
+            </div>
+
+            <!-- Period Status & Header KPIs -->
+            <div class="flex items-center gap-4 bg-slate-100/90 px-4 py-2 rounded-xl border border-slate-200 font-mono text-sm shadow-inner">
+                <div class="flex items-center gap-2 text-slate-700">
+                    <span class="text-slate-400 text-xs">經營進度</span>
+                    <span id="kpiPeriod" class="font-bold text-blue-600 text-base">第 1 期</span>
+                    <span class="text-slate-400 text-xs">(共 24 期)</span>
+                </div>
+                <div class="h-4 w-px bg-slate-300"></div>
+                <div class="flex items-center gap-2">
+                    <span class="text-slate-400 text-xs">營運現金</span>
+                    <span id="kpiCash" class="font-bold text-emerald-600">$350,000</span>
+                </div>
+                <div class="h-4 w-px bg-slate-300"></div>
+                <div class="flex items-center gap-2">
+                    <span class="text-slate-400 text-xs">累計淨利</span>
+                    <span id="kpiAccumProfit" class="font-bold text-sky-600">$0</span>
+                </div>
+                <div class="h-4 w-px bg-slate-300"></div>
+                <div class="flex items-center gap-1.5" id="weatherBadge">
+                    <span id="kpiWeatherIcon">⛅</span>
+                    <span id="kpiWeatherText" class="text-slate-600 font-sans text-xs">多雲舒適</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace Container -->
+    <main class="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 flex-1 space-y-6">
+
+        <!-- Banner for Game Status / Settlement -->
+        <div id="gameStatusBanner" class="hidden p-4 rounded-xl border shadow-sm transition-all duration-300"></div>
+
+        <!-- Upper Row: Location & Environment Summary -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- 1. 商圈立地設定 -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h2 class="font-bold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="map-pin" class="w-4 h-4 text-blue-600"></i>
+                        商圈立地條件 (Location)
+                    </h2>
+                    <span id="locBadge" class="text-xs bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-medium border border-blue-200">商業辦公區</span>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1.5">選擇門市開設商圈 (切換將重新開局)</label>
+                    <select id="selectLocation" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        <option value="commercial">🏢 商業辦公區 (上班族多、鮮食飲料高、租金高)</option>
+                        <option value="residential">🏡 優質住宅區 (家庭社區、乾貨日用佳、客流穩)</option>
+                        <option value="school">🎓 大專學校區 (學生眾多、價格敏感、零食冷飲旺)</option>
+                        <option value="tourist">🏖️ 觀光風景區 (假日暴增、冰品伴手禮、高租金)</option>
+                        <option value="old_community">👵 傳統老社區 (熟客長輩、講求性價比、租金平實)</option>
+                    </select>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs space-y-1.5 text-slate-600">
+                    <div class="flex justify-between">
+                        <span>基礎客流量：</span>
+                        <strong id="locBaseTraffic" class="text-slate-900 font-mono">1,400 人/日</strong>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>月租金支出：</span>
+                        <strong id="locRent" class="text-slate-900 font-mono">$65,000 / 月</strong>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>週末客流倍率：</span>
+                        <strong id="locWeekendFactor" class="text-slate-900 font-mono">0.45x</strong>
+                    </div>
+                    <p id="locDesc" class="text-slate-500 pt-1 text-[11px] leading-relaxed border-t border-slate-200">
+                        上班族聚集，平日人流極高，偏好便當鮮食與現煮咖啡/飲料，重視快速結帳。
+                    </p>
+                </div>
+            </div>
+
+            <!-- 2. 本週外部情境與情報 -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h2 class="font-bold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="cloud-sun" class="w-4 h-4 text-amber-500"></i>
+                        環境情報 (Environment)
+                    </h2>
+                    <span class="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-medium border border-amber-200">即時動態</span>
+                </div>
+                <div class="space-y-3">
+                    <div class="p-3 bg-amber-50/60 rounded-xl border border-amber-200 flex items-start gap-3">
+                        <span id="envWeatherIcon" class="text-2xl">⛅</span>
+                        <div class="text-xs space-y-0.5">
+                            <div class="font-bold text-amber-900" id="envWeatherTitle">多雲舒適</div>
+                            <div class="text-amber-700" id="envWeatherDesc">氣溫適中，各項商品需求保持常態基準。</div>
+                        </div>
+                    </div>
+                    <div class="p-3 bg-indigo-50/60 rounded-xl border border-indigo-200 flex items-start gap-3">
+                        <span class="text-xl">📢</span>
+                        <div class="text-xs space-y-0.5">
+                            <div class="font-bold text-indigo-900" id="envEventTitle">日常經營週</div>
+                            <div class="text-indigo-700" id="envEventDesc">維持常態客流與消費節奏。</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. 門市營運品質指標 -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h2 class="font-bold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="award" class="w-4 h-4 text-emerald-600"></i>
+                        門市商譽與服務 (Service Quality)
+                    </h2>
+                    <span class="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-medium border border-emerald-200">即時評鑑</span>
+                </div>
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div class="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+                        <div class="text-[11px] text-slate-500">服務滿意度</div>
+                        <div id="valServiceScore" class="text-lg font-bold text-blue-600 font-mono mt-0.5">80分</div>
+                        <div class="text-[10px] text-slate-400">薪資與人力</div>
+                    </div>
+                    <div class="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+                        <div class="text-[11px] text-slate-500">門市清潔度</div>
+                        <div id="valCleanScore" class="text-lg font-bold text-emerald-600 font-mono mt-0.5">85分</div>
+                        <div class="text-[10px] text-slate-400">保養與整潔</div>
+                    </div>
+                    <div class="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+                        <div class="text-[11px] text-slate-500">架上充足率</div>
+                        <div id="valShelfScore" class="text-lg font-bold text-amber-600 font-mono mt-0.5">95%</div>
+                        <div class="text-[10px] text-slate-400">無缺貨比率</div>
+                    </div>
+                </div>
+                <div class="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                    💡 提示：門市口碑直接影響下期進店客流量！若時薪過低或排班不足導致結帳排隊，滿意度將大幅下跌。
+                </div>
+            </div>
+        </div>
+
+        <!-- Middle Section: 4 Product Categories Decision Grid -->
+        <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-5">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                <div>
+                    <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="shopping-bag" class="w-5 h-5 text-blue-600"></i>
+                        本期商品管理決策：四大品類進貨與定價 (Merchandising)
+                    </h2>
+                    <p class="text-xs text-slate-500 mt-0.5">請針對各品類設定本期售價與採購進貨數量。注意保存期限：鮮食當週未售出 85% 將過期報廢！</p>
+                </div>
+                <div class="flex gap-2">
+                    <button id="btnPresetBalance" class="px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg border border-slate-300 transition">
+                        標準平衡進貨
+                    </button>
+                    <button id="btnPresetFresh" class="px-3 py-1.5 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-300 transition">
+                        鮮食搶攻策略
+                    </button>
+                    <button id="btnPresetSafety" class="px-3 py-1.5 text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg border border-amber-300 transition">
+                        防過期保守策
+                    </button>
+                </div>
+            </div>
+
+            <!-- Product Cards Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- 1. 鮮食熱食 -->
+                <div class="p-4 rounded-xl border border-emerald-200 bg-emerald-50/30 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-2xl">🍱</span>
+                            <div>
+                                <h3 class="font-bold text-sm text-slate-900">鮮食熱食</h3>
+                                <div class="text-[10px] text-emerald-700 font-medium">便當/飯糰/三明治</div>
+                            </div>
+                        </div>
+                        <span class="text-[10px] bg-red-100 text-red-700 border border-red-200 px-1.5 py-0.5 rounded font-bold">1天報廢</span>
+                    </div>
+                    <div class="text-xs space-y-1 text-slate-600 bg-white p-2.5 rounded-lg border border-slate-200">
+                        <div class="flex justify-between"><span>批發進價:</span> <strong class="font-mono text-slate-800">$45 / 份</strong></div>
+                        <div class="flex justify-between"><span>當前庫存:</span> <strong id="stock-freshFood" class="font-mono text-emerald-700">180 份</strong></div>
+                    </div>
+                    <div class="space-y-2">
+                        <div>
+                            <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                                <span>門市售價 ($/份)</span>
+                                <input type="number" id="num-price-freshFood" min="50" max="120" value="75" class="w-16 px-1.5 py-0.5 text-right font-mono text-xs border border-slate-300 rounded">
+                            </div>
+                            <input type="range" id="slider-price-freshFood" min="50" max="120" value="75" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer slider-thumb">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                                <span>本期進貨量 (份)</span>
+                                <input type="number" id="num-order-freshFood" min="0" max="4000" step="50" value="1200" class="w-20 px-1.5 py-0.5 text-right font-mono text-xs border border-slate-300 rounded">
+                            </div>
+                            <input type="range" id="slider-order-freshFood" min="0" max="4000" step="50" value="1200" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer slider-thumb">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. 低溫冷飲 -->
+                <div class="p-4 rounded-xl border border-sky-200 bg-sky-50/30 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-2xl">🧃</span>
+                            <div>
+                                <h3 class="font-bold text-sm text-slate-900">低溫冷飲</h3>
+                                <div class="text-[10px] text-sky-700 font-medium">茶飲/咖啡/乳品/碳酸</div>
+                            </div>
+                        </div>
+                        <span class="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded font-bold">7天損耗4%</span>
+                    </div>
+                    <div class="text-xs space-y-1 text-slate-600 bg-white p-2.5 rounded-lg border border-slate-200">
+                        <div class="flex justify-between"><span>批發進價:</span> <strong class="font-mono text-slate-800">$18 / 瓶</strong></div>
+                        <div class="flex justify-between"><span>當前庫存:</span> <strong id="stock-drinks" class="font-mono text-sky-700">650 瓶</strong></div>
+                    </div>
+                    <div class="space-y-2">
+                        <div>
+                            <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                                <span>門市售價 ($/瓶)</span>
+                                <input type="number" id="num-price-drinks" min="20" max="60" value="32" class="w-16 px-1.5 py-0.5 text-right font-mono text-xs border border-slate-300 rounded">
+                            </div>
+                            <input type="range" id="slider-price-drinks" min="20" max="60" value="32" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer slider-thumb">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                                <span>本期進貨量 (瓶)</span>
+                                <input type="number" id="num-order-drinks" min="0" max="6000" step="100" value="2400" class="w-20 px-1.5 py-0.5 text-right font-mono text-xs border border-slate-300 rounded">
+                            </div>
+                            <input type="range" id="slider-order-drinks" min="0" max="6000" step="100" value="2400" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer slider-thumb">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. 常溫乾貨 -->
+                <div class="p-4 rounded-xl border border-amber-200 bg-amber-50/30 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-2xl">🍪</span>
+                            <div>
+                                <h3 class="font-bold text-sm text-slate-900">常溫乾貨</h3>
+                                <div class="text-[10px] text-amber-700 font-medium">餅乾零食/泡麵/糖果</div>
+                            </div>
+                        </div>
+                        <span class="text-[10px] bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0.5 rounded font-bold">30天損耗1%</span>
+                    </div>
+                    <div class="text-xs space-y-1 text-slate-600 bg-white p-2.5 rounded-lg border border-slate-200">
+                        <div class="flex justify-between"><span>批發進價:</span> <strong class="font-mono text-slate-800">$22 / 包</strong></div>
+                        <div class="flex justify-between"><span>當前庫存:</span> <strong id="stock-snacks" class="font-mono text-amber-700">500 包</strong></div>
+                    </div>
+                    <div class="space-y-2">
+                        <div>
+                            <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                                <span>門市售價 ($/包)</span>
+                                <input type="number" id="num-price-snacks" min="25" max="70" value="38" class="w-16 px-1.5 py-0.5 text-right font-mono text-xs border border-slate-300 rounded">
+                            </div>
+                            <input type="range" id="slider-price-snacks" min="25" max="70" value="38" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer slider-thumb">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                                <span>本期進貨量 (包)</span>
+                                <input type="number" id="num-order-snacks" min="0" max="4000" step="50" value="1200" class="w-20 px-1.5 py-0.5 text-right font-mono text-xs border border-slate-300 rounded">
+                            </div>
+                            <input type="range" id="slider-order-snacks" min="0" max="4000" step="50" value="1200" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer slider-thumb">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. 日用品與文具 -->
+                <div class="p-4 rounded-xl border border-purple-200 bg-purple-50/30 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-2xl">🧴</span>
+                            <div>
+                                <h3 class="font-bold text-sm text-slate-900">日用百貨</h3>
+                                <div class="text-[10px] text-purple-700 font-medium">衛生紙/清潔用品/電池</div>
+                            </div>
+                        </div>
+                        <span class="text-[10px] bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0.5 rounded font-bold">60天低損耗</span>
+                    </div>
+                    <div class="text-xs space-y-1 text-slate-600 bg-white p-2.5 rounded-lg border border-slate-200">
+                        <div class="flex justify-between"><span>批發進價:</span> <strong class="font-mono text-slate-800">$40 / 件</strong></div>
+                        <div class="flex justify-between"><span>當前庫存:</span> <strong id="stock-dailyGoods" class="font-mono text-purple-700">220 件</strong></div>
+                    </div>
+                    <div class="space-y-2">
+                        <div>
+                            <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                                <span>門市售價 ($/件)</span>
+                                <input type="number" id="num-price-dailyGoods" min="45" max="110" value="65" class="w-16 px-1.5 py-0.5 text-right font-mono text-xs border border-slate-300 rounded">
+                            </div>
+                            <input type="range" id="slider-price-dailyGoods" min="45" max="110" value="65" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer slider-thumb">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                                <span>本期進貨量 (件)</span>
+                                <input type="number" id="num-order-dailyGoods" min="0" max="2000" step="20" value="400" class="w-20 px-1.5 py-0.5 text-right font-mono text-xs border border-slate-300 rounded">
+                            </div>
+                            <input type="range" id="slider-order-dailyGoods" min="0" max="2000" step="20" value="400" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer slider-thumb">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Lower Section: Store Operations & Action Bar -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- 門市人事與維護決策 -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+                <h3 class="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+                    <i data-lucide="users" class="w-4 h-4 text-blue-600"></i>
+                    門市排班與行銷維護 (Store Operations)
+                </h3>
+                <div class="space-y-3.5">
+                    <div>
+                        <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                            <span>每日總班次人數 (早/晚/大夜班配置)</span>
+                            <span id="display-staffShiftCount" class="font-mono text-blue-600 font-bold">3 人</span>
+                        </div>
+                        <input type="range" id="slider-staffShiftCount" min="1" max="6" value="3" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer slider-thumb">
+                        <div class="text-[10px] text-slate-400 mt-1">班次不足將導致結帳塞車，顧客流失率升高。</div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                            <span>員工時薪發放 ($/時)</span>
+                            <span id="display-hourlyWage" class="font-mono text-blue-600 font-bold">$190</span>
+                        </div>
+                        <input type="range" id="slider-hourlyWage" min="183" max="260" value="190" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer slider-thumb">
+                        <div class="text-[10px] text-slate-400 mt-1">法定最低 $183，優渥薪水可顯著提升服務滿意度。</div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                            <span>本週商圈行銷宣傳費 ($)</span>
+                            <span id="display-marketingSpend" class="font-mono text-blue-600 font-bold">$5,000</span>
+                        </div>
+                        <input type="range" id="slider-marketingSpend" min="0" max="20000" step="500" value="5000" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer slider-thumb">
+                        <div class="text-[10px] text-slate-400 mt-1">發送宣傳傳單、APP 推播促銷，引導更多散客進店。</div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                            <span>設備維護與外包清潔費 ($)</span>
+                            <span id="display-shelfCleaningBudget" class="font-mono text-blue-600 font-bold">$2,000</span>
+                        </div>
+                        <input type="range" id="slider-shelfCleaningBudget" min="0" max="8000" step="500" value="2000" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer slider-thumb">
+                        <div class="text-[10px] text-slate-400 mt-1">維持冷藏櫃運作穩定與店面乾淨明亮。</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 決策推進行動面板 -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between space-y-4">
+                <div>
+                    <h3 class="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+                        <i data-lucide="play" class="w-4 h-4 text-emerald-600"></i>
+                        經營決策執行與推進
+                    </h3>
+                    <div class="text-xs text-slate-600 space-y-2 mt-3">
+                        <p>確認完上述四大品類之「售價」與「進貨量」，以及門市排班與行銷預算後，即可推進營業期。</p>
+                        <div class="p-3 bg-blue-50/70 rounded-xl border border-blue-200 text-blue-900 text-xs space-y-1">
+                            <div class="font-semibold">💡 營運預估：</div>
+                            <div class="flex justify-between"><span>本期採購進貨估算：</span><strong id="estPurchaseCost" class="font-mono">$139,400</strong></div>
+                            <div class="flex justify-between"><span>本期人事排班成本：</span><strong id="estLaborCost" class="font-mono">$31,920</strong></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-2.5 pt-2">
+                    <button id="btnStep1" class="w-full py-3 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold rounded-xl shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 transition">
+                        <i data-lucide="play" class="w-4 h-4"></i>
+                        推進下一期 (執行第 <span id="btnNextPeriodNum">1</span> 期經營)
+                    </button>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="btnStep4" class="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-300 transition">
+                            連續執行 4 期 (1個月)
+                        </button>
+                        <button id="btnReset" class="py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs rounded-xl border border-rose-200 transition">
+                            重新開局
+                        </button>
+                    </div>
+                    <button id="btnExportCSV" class="w-full py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 font-medium text-xs rounded-xl border border-slate-200 transition flex items-center justify-center gap-1.5">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                        匯出 24 期經營報表 (CSV)
+                    </button>
+                </div>
+            </div>
+
+            <!-- 本期即時財務結算摘要 -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
+                <h3 class="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+                    <i data-lucide="file-text" class="w-4 h-4 text-emerald-600"></i>
+                    最新一期損益摘要 (P&L Summary)
+                </h3>
+                <div class="text-xs space-y-2" id="summaryContainer">
+                    <div class="flex justify-between py-1 border-b border-slate-100">
+                        <span class="text-slate-500">本期營業收入</span>
+                        <strong id="sumRev" class="font-mono text-slate-900">$0</strong>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100">
+                        <span class="text-slate-500">銷貨成本 (COGS)</span>
+                        <strong id="sumCogs" class="font-mono text-slate-900">$0</strong>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100">
+                        <span class="text-slate-500">營業毛利 (Gross Profit)</span>
+                        <strong id="sumGross" class="font-mono text-emerald-600">$0</strong>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100">
+                        <span class="text-slate-500">過期報廢損失 (Waste)</span>
+                        <strong id="sumWaste" class="font-mono text-rose-600">$0</strong>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100">
+                        <span class="text-slate-500">門市營運費用 (OPEX)</span>
+                        <strong id="sumOpex" class="font-mono text-slate-900">$0</strong>
+                    </div>
+                    <div class="flex justify-between py-1.5 bg-slate-50 px-2 rounded-lg font-bold text-sm">
+                        <span>本期稅前淨利</span>
+                        <strong id="sumNet" class="font-mono text-blue-600">$0</strong>
+                    </div>
+                    <div class="flex justify-between py-1 px-2 text-slate-500 text-[11px]">
+                        <span>本期現金淨流入/出</span>
+                        <strong id="sumCashFlow" class="font-mono text-slate-700">$0</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Dashboard (4 High-Contrast Bright Charts) -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Chart 1: 財務走勢 (營收 vs 淨利) -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                        <i data-lucide="trending-up" class="w-4 h-4 text-blue-600"></i>
+                        營業收入與淨利走勢 (Revenue & Net Profit)
+                    </h3>
+                    <span class="text-[10px] text-slate-400 font-mono">金額 ($)</span>
+                </div>
+                <div class="h-64">
+                    <canvas id="chartFin"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 2: 現金流與累計獲利 -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                        <i data-lucide="dollar-sign" class="w-4 h-4 text-emerald-600"></i>
+                        現金水位與累計獲利 (Cash & Cumulative Profit)
+                    </h3>
+                    <span class="text-[10px] text-slate-400 font-mono">金額 ($)</span>
+                </div>
+                <div class="h-64">
+                    <canvas id="chartCash"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 3: 四大品類銷量分佈 -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                        <i data-lucide="bar-chart-2" class="w-4 h-4 text-amber-500"></i>
+                        四大品類銷售量 (Sales Units by Category)
+                    </h3>
+                    <span class="text-[10px] text-slate-400 font-mono">銷量 (件/份/瓶)</span>
+                </div>
+                <div class="h-64">
+                    <canvas id="chartSales"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 4: 過期報廢與缺貨率 -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                        <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-500"></i>
+                        過期報廢成本與架上充足率 (Waste vs Shelf Availability)
+                    </h3>
+                    <span class="text-[10px] text-slate-400 font-mono">損失金額 / 充足率%</span>
+                </div>
+                <div class="h-64">
+                    <canvas id="chartWaste"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- History Records Table -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                    <i data-lucide="history" class="w-4 h-4 text-blue-600"></i>
+                    歷期營運歷史報表 (Historical Performance Log)
+                </h3>
+                <span class="text-xs text-slate-400" id="tableRecordCount">共 0 筆紀錄</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                            <th class="p-2.5">期數</th>
+                            <th class="p-2.5">天氣/情境</th>
+                            <th class="p-2.5 text-right">客流量</th>
+                            <th class="p-2.5 text-right">營業收入</th>
+                            <th class="p-2.5 text-right">營業毛利</th>
+                            <th class="p-2.5 text-right">報廢損失</th>
+                            <th class="p-2.5 text-right">本期淨利</th>
+                            <th class="p-2.5 text-right">期末現金</th>
+                            <th class="p-2.5 text-center">服務分</th>
+                            <th class="p-2.5 text-center">充足率</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTableBody" class="divide-y divide-slate-100 text-slate-700 font-mono">
+                        <tr>
+                            <td colspan="10" class="p-4 text-center text-slate-400 font-sans italic">尚無營運數據，請點擊「推進下一期」開始經營</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-200 bg-white py-4 px-4 sm:px-6 text-center text-xs text-slate-500">
+        <p>CVS 零售專家 (Retail Expert) 經營模擬器・純前端靜態架構，可直接發布至 GitHub Pages 運作</p>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="engine.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
